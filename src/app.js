@@ -133,6 +133,21 @@ app.get('/customers', async (req, res) => {
 	}
 });
 
+//Get customer by id//
+app.get("/customers/:id", async (req,res) => {
+    try {
+		const id = parseInt(req.params.id);
+        const result = await connection.query(`SELECT * FROM customers WHERE id = $1`, [id]);
+        
+		if(result.rowCount > 0) res.send(result.rows[0]);
+        else res.sendStatus(404); 
+
+    } catch(error) {
+        console.log(error);
+        res.sendStatus(500);
+    }
+});
+
 //Insert Customer//
 app.post('/customers', async (req, res) => {
 	try {
