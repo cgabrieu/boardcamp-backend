@@ -19,7 +19,7 @@ const insertGameRules = joi.object({
 	pricePerDay: joi.number().min(1).required()
 });
 
-const insertCustomerRules = joi.object({
+const customerRules = joi.object({
 	name: joi.string().required(),
 	phone: joi.string().regex(/^[0-9]{10,11}$/).required(),
 	cpf: joi.string().regex(/^[0-9]{11}$/).required(),
@@ -137,7 +137,8 @@ app.get('/customers', async (req, res) => {
 app.get("/customers/:id", async (req,res) => {
     try {
 		const id = parseInt(req.params.id);
-        const result = await connection.query(`SELECT * FROM customers WHERE id = $1`, [id]);
+        const result = await connection
+			.query(`SELECT * FROM customers WHERE id = $1`, [id]);
         
 		if(result.rowCount > 0) res.send(result.rows[0]);
         else res.sendStatus(404); 
@@ -153,7 +154,7 @@ app.post('/customers', async (req, res) => {
 	try {
 		const { name, phone, cpf, birthday } = req.body;
 
-		const errors = insertCustomerRules.validate(req.body).error;
+		const errors = customerRules.validate(req.body).error;
 		if (errors) {
 			console.log(errors);
 			return res.sendStatus(400);
@@ -168,6 +169,30 @@ app.post('/customers', async (req, res) => {
 			VALUES ($1, $2, $3, $4)`
 			, [name, phone, cpf, birthday]);
 		res.sendStatus(201);
+	} catch (error) {
+		console.log(error);
+		res.sendStatus(500);
+	}
+});
+
+//Update Customer//
+app.put('/customers/:id', async (req, res) => {
+	try {
+		const id = parseInt(req.params.id);
+		const { name, phone, cpf, birthday } = req.body;
+		const errors = customerRules.validate(req.body).error;
+
+		if (errors) {
+			console.log(errors);
+			return res.sendStatus(400);
+		}
+
+		await connection.query(`
+			UPDATE customers 
+			SET name = $1, phone = $2, cpf = $3, birthday = $4 
+			WHERE id = $5`
+			, [name, phone, cpf, birthday, id]);
+		res.sendStatus(200);
 	} catch (error) {
 		console.log(error);
 		res.sendStatus(500);
