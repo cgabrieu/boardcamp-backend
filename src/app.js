@@ -35,7 +35,7 @@ app.get('/categories', async (req, res) => {
 	try {
 		const result = await connection.query("SELECT * FROM categories;");
 
-		if (result.rows.length === 0) {
+		if (result.rowCount === 0) {
 			res.send("Lista de categorias vazia.");
 			return;
 		}
@@ -106,6 +106,27 @@ app.post('/games', async (req, res) => {
 			VALUES ($1, $2, $3, $4, $5)`
 			, [name, image, stockTotal, categoryId, pricePerDay]);
 		res.sendStatus(201);
+	} catch (error) {
+		console.log(error);
+		res.sendStatus(500);
+	}
+});
+
+//List Customers//
+app.get('/customers', async (req, res) => {
+	try {
+		const { cpf } = req.query;
+		let result;
+		if (cpf) {
+			result = await connection
+				.query(`SELECT * FROM customers WHERE cpf ILIKE $1`,
+					[cpf + '%']);
+		} else {
+			result = await connection.query("SELECT * FROM customers;");
+		}
+
+		if (result.rowCount === 0) return res.send("Lista de clientes vazia.");
+		res.status(200).send(result.rows);
 	} catch (error) {
 		console.log(error);
 		res.sendStatus(500);
