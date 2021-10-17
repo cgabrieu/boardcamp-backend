@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import joi from 'joi';
+import dayjs from 'dayjs';
 import connection from './database/database.js';
 
 const SERVER_PORT = 4000;
@@ -15,7 +16,14 @@ const insertGameRules = joi.object({
 	image: joi.string().uri().required().allow(''),
 	stockTotal: joi.number().min(1).required(),
 	categoryId: joi.number().required(),
-	pricePerDay: joi.number().min(1).required(),
+	pricePerDay: joi.number().min(1).required()
+});
+
+const insertCustomerRules = joi.object({
+	name: joi.string().required(),
+	phone: joi.string().regex(/^[0-9]{10,11}$/).required(),
+	cpf: joi.string().regex(/^[0-9]{11}$/).required(),
+	birthday: joi.date().max(dayjs().format('YYYY-MM-DD'))
 });
 
 app.get('/check-server', (req, res) => {
@@ -90,7 +98,7 @@ app.post('/games', async (req, res) => {
 		}
 
 		const hasGame = await connection.query("SELECT * FROM games WHERE name = $1", [name]);
-		if (hasGame.rows.length > 0) return res.sendStatus(409);
+		if (hasGame.rowCount > 0) return res.sendStatus(409);
 
 		await connection.query(`
 			INSERT INTO 
@@ -103,6 +111,33 @@ app.post('/games', async (req, res) => {
 		res.sendStatus(500);
 	}
 });
+
+//Insert Customer//
+app.post('/customers', async (req, res) => {
+	try {
+		const { name, phone, cpf, birthday } = req.body;
+
+		const errors = insertCustomerRules.validate(req.body).error;
+		if (errors) {
+			console.log(errors);
+			return res.sendStatus(400);
+		}
+
+		const hasCPF = await connection.query("SELECT * FROM customers WHERE cpf = $1", [cpf]);
+		if (hasCPF.rowCount > 0) return res.sendStatus(409);
+
+		await connection.query(`
+			INSERT INTO 
+			customers (name, phone, cpf, birthday) 
+			VALUES ($1, $2, $3, $4)`
+			, [name, phone, cpf, birthday]);
+		res.sendStatus(201);
+	} catch (error) {
+		console.log(error);
+		res.sendStatus(500);
+	}
+});
+
 
 app.listen(SERVER_PORT, () => {
 	console.log(`Server is listening on port ${SERVER_PORT}.`);
