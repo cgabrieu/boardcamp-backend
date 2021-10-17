@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import joi from 'joi;'
+import joi from 'joi';
 import connection from './database/database.js';
 
 const SERVER_PORT = 4000;
@@ -47,7 +47,7 @@ app.post('/categories', async (req, res) => {
 
 		const hasCategory = await connection.query("SELECT * FROM categories WHERE name = $1", [categoryName]);
 
-		if (hasCategory.rowCount > 0) return res.statusCode(409);
+		if (hasCategory.rowCount > 0) return res.sendStatus(409);
 
 		await connection.query("INSERT INTO categories (name) VALUES ($1)", [categoryName]);
 		res.sendStatus(201);
@@ -70,10 +70,7 @@ app.get('/games', async (req, res) => {
 			result = await connection.query("SELECT * FROM games;");
 		}
 
-		if (result.rowCount === 0) {
-			res.send("Lista de jogos vazia.");
-			return;
-		}
+		if (result.rowCount === 0) return res.send("Lista de jogos vazia.");
 		res.status(200).send(result.rows);
 	} catch (error) {
 		console.log(error);
@@ -86,13 +83,20 @@ app.post('/games', async (req, res) => {
 	try {
 		const { name, image, stockTotal, categoryId, pricePerDay } = req.body;
 
-		if (!gameName) return res.sendStatus(400);
+		const errors = insertGameRules.validate(req.body).error;
+		if (errors) {
+			console.log(errors);
+			return res.sendStatus(400);
+		}
 
-		const hasCategory = await connection.query("SELECT * FROM games WHERE name = $1", [gameName]);
+		const hasGame = await connection.query("SELECT * FROM games WHERE name = $1", [name]);
+		if (hasGame.rows.length > 0) return res.sendStatus(409);
 
-		if (hasCategory.rowCount > 0) return res.statusCode(409);
-
-		await connection.query("INSERT INTO categories (name) VALUES ($1)", [categoryName]);
+		await connection.query(`
+			INSERT INTO 
+			games (name, image, "stockTotal", "categoryId", "pricePerDay") 
+			VALUES ($1, $2, $3, $4, $5)`
+			, [name, image, stockTotal, categoryId, pricePerDay]);
 		res.sendStatus(201);
 	} catch (error) {
 		console.log(error);
