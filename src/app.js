@@ -299,14 +299,14 @@ app.post('/rentals/:id/return', async (req, res) => {
 
 		if (result.rowCount === 0) return res.sendStatus(404);
 
-		const rental = await connection.query(`
+		const isReturned = await connection.query(`
 			SELECT * FROM rentals
 			WHERE id = $1
 			AND "returnDate" IS NOT NULL`,
 			[req.params.id]
 		);
 
-        if(rental.rows.length > 0) return res.sendStatus(400);
+        if(isReturned.rowCount > 0) return res.sendStatus(400);
 
         const { rentDate, daysRented, pricePerDay } = result.rows[0];
 
@@ -325,6 +325,38 @@ app.post('/rentals/:id/return', async (req, res) => {
 		console.log(error);
 		res.sendStatus(500);
 	}
+});
+
+//Remove Rental//
+app.delete("/rentals/:id", async (req,res) => {
+    try {
+		const { id } = req.params;
+
+		const hasRental = await connection.query(`
+            SELECT * FROM rentals WHERE rentals.id = $1;`,
+			[id]
+		);
+
+		if (hasRental.rowCount === 0) return res.sendStatus(404);
+
+        const isReturned = await connection.query(`
+			SELECT * FROM rentals 
+			WHERE id = $1 
+			AND "returnDate" IS NOT NULL`,
+			[id]
+		);
+
+        if(isReturned.rowCount > 0) return res.sendStatus(400);
+
+        await connection.query(`
+			DELETE FROM rentals WHERE id = $1`,
+			[id]
+		);
+        res.sendStatus(200);
+    } catch(error) {
+        console.log(error);
+        res.sendStatus(500);
+    }
 });
 
 app.listen(SERVER_PORT, () => {
