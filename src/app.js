@@ -103,8 +103,9 @@ app.post('/games', async (req, res) => {
 		await connection.query(`
 			INSERT INTO 
 			games (name, image, "stockTotal", "categoryId", "pricePerDay") 
-			VALUES ($1, $2, $3, $4, $5)`
-			, [name, image, stockTotal, categoryId, pricePerDay]);
+			VALUES ($1, $2, $3, $4, $5)`,
+			[name, image, stockTotal, categoryId, pricePerDay]
+		);
 		res.sendStatus(201);
 	} catch (error) {
 		console.log(error);
@@ -166,8 +167,9 @@ app.post('/customers', async (req, res) => {
 		await connection.query(`
 			INSERT INTO 
 			customers (name, phone, cpf, birthday) 
-			VALUES ($1, $2, $3, $4)`
-			, [name, phone, cpf, birthday]);
+			VALUES ($1, $2, $3, $4)`,
+			[name, phone, cpf, birthday]
+		);
 		res.sendStatus(201);
 	} catch (error) {
 		console.log(error);
@@ -190,8 +192,9 @@ app.put('/customers/:id', async (req, res) => {
 		await connection.query(`
 			UPDATE customers 
 			SET name = $1, phone = $2, cpf = $3, birthday = $4 
-			WHERE id = $5`
-			, [name, phone, cpf, birthday, id]);
+			WHERE id = $5`,
+			[name, phone, cpf, birthday, id]
+		);
 		res.sendStatus(200);
 	} catch (error) {
 		console.log(error);
@@ -199,6 +202,37 @@ app.put('/customers/:id', async (req, res) => {
 	}
 });
 
+
+
+//Insert Rental//
+app.post('/rentals', async (req, res) => {
+	try {
+		const { customerId, gameId, daysRented } = req.body;
+
+		const customer = await connection.query("SELECT * FROM customers WHERE id = $1", [customerId]);
+		const game = await connection.query("SELECT * FROM games WHERE id = $1", [gameId]);
+		const openRentalsGame = await connection.query(`
+            SELECT * FROM rentals 
+            WHERE "gameId" = $1 
+            AND "returnDate" IS NULL`,
+			[gameId]
+		);
+		
+		if (customer.rowCount === 0 || game.rowCount === 0 || openRentalsGame.rowCount >= game.rows[0].stockTotal || daysRented < 1)
+			return res.sendStatus(400);
+
+		await connection.query(`
+			INSERT INTO rentals 
+			("customerId", "gameId", "rentDate", "daysRented", "originalPrice", "returnDate", "delayFee") 
+			VALUES ($1, $2, NOW(), $3, $4, NULL, NULL)`,
+			[customerId, gameId, daysRented, (game.rows[0].pricePerDay * daysRented)]
+		);
+		res.sendStatus(201);
+	} catch (error) {
+		console.log(error);
+		res.sendStatus(500);
+	}
+});
 
 app.listen(SERVER_PORT, () => {
 	console.log(`Server is listening on port ${SERVER_PORT}.`);
