@@ -135,19 +135,19 @@ app.get('/customers', async (req, res) => {
 });
 
 //Get customer by id//
-app.get("/customers/:id", async (req,res) => {
-    try {
+app.get("/customers/:id", async (req, res) => {
+	try {
 		const id = parseInt(req.params.id);
-        const result = await connection
+		const result = await connection
 			.query(`SELECT * FROM customers WHERE id = $1`, [id]);
-        
-		if(result.rowCount > 0) res.send(result.rows[0]);
-        else res.sendStatus(404); 
 
-    } catch(error) {
-        console.log(error);
-        res.sendStatus(500);
-    }
+		if (result.rowCount > 0) res.send(result.rows[0]);
+		else res.sendStatus(404);
+
+	} catch (error) {
+		console.log(error);
+		res.sendStatus(500);
+	}
 });
 
 //Insert Customer//
@@ -202,7 +202,60 @@ app.put('/customers/:id', async (req, res) => {
 	}
 });
 
+//List Rentals//
+app.get('/rentals', async (req, res) => {
+	try {
 
+		const { customerId, gameId } = req.query;
+
+		let query = `
+			SELECT rentals.*, 
+				customers.name AS "customerName", 
+				games.name AS "gameName", 
+				categories.id AS "categoryId", 
+				categories.name AS "categoryName" 
+			FROM rentals 
+			JOIN customers ON rentals."customerId" = customers.id 
+			JOIN games ON rentals."gameId" = games.id 
+			JOIN categories ON games."categoryId" = categories.id 
+		`;
+		let result;
+
+		if (customerId) {
+			query += ` WHERE "customerId" = $1`;
+			result = await connection.query(query, [customerId]);
+		} else if (gameId) {
+			query += ` WHERE "gameId" = $1`;
+			result = await connection.query(query, [gameId]);
+		} else {
+			result = await connection.query(query);
+		}
+
+		if (result.rowCount === 0) return res.send("Lista de alugueis vazia.");
+
+		result.rows.forEach((row) => {
+			row.customer = {
+				id: row.customerId,
+				name: row.customerName
+			}
+			row.game = {
+				id: row.gameId,
+				name: row.gameName,
+				categoryId: row.categoryId,
+				categoryName: row.categoryName
+			}
+			delete row.categoryId;
+			delete row.categoryName;
+			delete row.customerName;
+			delete row.gameName;
+		})
+
+		res.send(result.rows);
+	} catch (error) {
+		console.log(error);
+		res.sendStatus(500);
+	}
+});
 
 //Insert Rental//
 app.post('/rentals', async (req, res) => {
@@ -217,7 +270,7 @@ app.post('/rentals', async (req, res) => {
             AND "returnDate" IS NULL`,
 			[gameId]
 		);
-		
+
 		if (customer.rowCount === 0 || game.rowCount === 0 || openRentalsGame.rowCount >= game.rows[0].stockTotal || daysRented < 1)
 			return res.sendStatus(400);
 
