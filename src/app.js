@@ -7,24 +7,43 @@ import * as rule from './rule/rule.js'
 const SERVER_PORT = 4000;
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-
 app.get('/check-server', (req, res) => {
-	res.status(200).send("Rodando plenamente ou talvez.");
+	res.status(200).send("Rodando plenamente ou deveria.");
 });
+
+async function getResult(query, table) {
+	const { offset, limit, order, desc } = query;
+
+	let descOrAsc = 'ASC';
+	if (desc) {
+		descOrAsc = (desc === "true") ? 'DESC' : 'ASC';
+	}
+
+	const acceptValues = ['id','customerId','gameId','name', 'daysRented', 'ASC', 'DESC'];
+	if (order) {
+		return await connection.query(`
+				SELECT * FROM ${table} 
+				ORDER BY ${acceptValues.find(e => e === order)} ${acceptValues.find(e => e === descOrAsc)}
+				LIMIT $1 OFFSET $2;`,
+			[limit, offset]
+		);
+	}
+	return await connection.query(`
+		SELECT * FROM ${table} 
+		LIMIT $1 OFFSET $2;`,
+		[limit, offset]
+	);	
+}
 
 //List Categories//
 app.get('/categories', async (req, res) => {
 	try {
-		const result = await connection.query("SELECT * FROM categories;");
-
-		if (result.rowCount === 0) {
-			res.send("Lista de categorias vazia.");
-			return;
-		}
+		const result = await getResult(req.query, "categories");
+		if (result.rowCount === 0) return res.send("Lista de categorias vazia.");
+		
 		res.status(200).send(result.rows);
 	} catch (error) {
 		console.log(error);
@@ -55,13 +74,14 @@ app.post('/categories', async (req, res) => {
 app.get('/games', async (req, res) => {
 	try {
 		const { name } = req.query;
+
 		let result;
 		if (name) {
 			result = await connection
 				.query(`SELECT * FROM games WHERE name ILIKE $1`,
 					['%' + name + '%']);
 		} else {
-			result = await connection.query("SELECT * FROM games;");
+			result = await getResult(req.query, "games");
 		}
 
 		if (result.rowCount === 0) return res.send("Lista de jogos vazia.");
@@ -109,7 +129,7 @@ app.get('/customers', async (req, res) => {
 				.query(`SELECT * FROM customers WHERE cpf ILIKE $1`,
 					[cpf + '%']);
 		} else {
-			result = await connection.query("SELECT * FROM customers;");
+			result = await getResult(req.query, "customers");
 		}
 
 		if (result.rowCount === 0) return res.send("Lista de clientes vazia.");
@@ -191,7 +211,7 @@ app.put('/customers/:id', async (req, res) => {
 //List Rentals//
 app.get('/rentals', async (req, res) => {
 	try {
-		const { customerId, gameId } = req.query;
+		const { customerId, gameId, offset, limit } = req.query;
 
 		let query = `
 			SELECT rentals.*, 
@@ -205,15 +225,30 @@ app.get('/rentals', async (req, res) => {
 			JOIN categories ON games."categoryId" = categories.id 
 		`;
 
+		let params = [];
 		let result;
-		if (customerId) {
+		if (customerId && gameId) {
+			query += ` WHERE "customerId" = $1 AND "gameId" = $2`;
+			params.push(customerId, gameId);
+		} else if (customerId) {
 			query += ` WHERE "customerId" = $1`;
-			result = await connection.query(query, [customerId]);
+			params.push(customerId);
 		} else if (gameId) {
 			query += ` WHERE "gameId" = $1`;
-			result = await connection.query(query, [gameId]);
+			params.push(gameId);
+		}
+
+		if (offset && limit) {
+			query += ` LIMIT $${params.length+1} OFFSET $${params.length+2}`;
+			result = await connection.query(query, [...params, limit, offset]);
+		} else if (offset) {
+			query += ` OFFSET $${params.length+1}`;
+			result = await connection.query(query, [...params, offset]);
+		} else if (limit) {
+			query += ` LIMIT $${params.length+1}`;
+			result = await connection.query(query, [...params, limit]);
 		} else {
-			result = await connection.query(query);
+			result = await connection.query(query, params);
 		}
 
 		if (result.rowCount === 0) return res.send("Lista de alugueis vazia.");
@@ -292,15 +327,15 @@ app.post('/rentals/:id/return', async (req, res) => {
 			[id]
 		);
 
-        if(isReturned.rowCount > 0) return res.sendStatus(400);
+		if (isReturned.rowCount > 0) return res.sendStatus(400);
 
-        const { rentDate, daysRented, pricePerDay } = result.rows[0];
+		const { rentDate, daysRented, pricePerDay } = result.rows[0];
 
-        const duration = dayjs().diff(rentDate, "day");
-        let delayFee = null;
-        if(duration > daysRented) delayFee = (duration - daysRented) * pricePerDay;
+		const duration = dayjs().diff(rentDate, "day");
+		let delayFee = null;
+		if (duration > daysRented) delayFee = (duration - daysRented) * pricePerDay;
 
-        await connection.query(`
+		await connection.query(`
             UPDATE rentals
             SET "returnDate" = NOW(), "delayFee" = $1
             WHERE id = $2`,
@@ -314,8 +349,8 @@ app.post('/rentals/:id/return', async (req, res) => {
 });
 
 //Remove Rental//
-app.delete("/rentals/:id", async (req,res) => {
-    try {
+app.delete("/rentals/:id", async (req, res) => {
+	try {
 		const id = parseInt(req.params.id);
 
 		const hasRental = await connection.query(`
@@ -325,24 +360,24 @@ app.delete("/rentals/:id", async (req,res) => {
 
 		if (hasRental.rowCount === 0) return res.sendStatus(404);
 
-        const isReturned = await connection.query(`
+		const isReturned = await connection.query(`
 			SELECT * FROM rentals 
 			WHERE id = $1 
 			AND "returnDate" IS NOT NULL`,
 			[id]
 		);
 
-        if(isReturned.rowCount > 0) return res.sendStatus(400);
+		if (isReturned.rowCount > 0) return res.sendStatus(400);
 
-        await connection.query(`
+		await connection.query(`
 			DELETE FROM rentals WHERE id = $1`,
 			[id]
 		);
-        res.sendStatus(200);
-    } catch(error) {
-        console.log(error);
-        res.sendStatus(500);
-    }
+		res.sendStatus(200);
+	} catch (error) {
+		console.log(error);
+		res.sendStatus(500);
+	}
 });
 
 app.listen(SERVER_PORT, () => {
