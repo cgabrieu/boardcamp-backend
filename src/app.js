@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
-import joi from 'joi';
 import dayjs from 'dayjs';
 import connection from './database/database.js';
+import * as rule from './rule/rule.js'
 
 const SERVER_PORT = 4000;
 
@@ -11,20 +11,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const insertGameRules = joi.object({
-	name: joi.string().required(),
-	image: joi.string().uri().required().allow(''),
-	stockTotal: joi.number().min(1).required(),
-	categoryId: joi.number().required(),
-	pricePerDay: joi.number().min(1).required()
-});
-
-const customerRules = joi.object({
-	name: joi.string().required(),
-	phone: joi.string().regex(/^[0-9]{10,11}$/).required(),
-	cpf: joi.string().regex(/^[0-9]{11}$/).required(),
-	birthday: joi.date().max(dayjs().format('YYYY-MM-DD'))
-});
 
 app.get('/check-server', (req, res) => {
 	res.status(200).send("Rodando plenamente ou talvez.");
@@ -91,7 +77,7 @@ app.post('/games', async (req, res) => {
 	try {
 		const { name, image, stockTotal, categoryId, pricePerDay } = req.body;
 
-		const errors = insertGameRules.validate(req.body).error;
+		const errors = rule.insertGame.validate(req.body).error;
 		if (errors) {
 			console.log(errors);
 			return res.sendStatus(400);
@@ -155,7 +141,7 @@ app.post('/customers', async (req, res) => {
 	try {
 		const { name, phone, cpf, birthday } = req.body;
 
-		const errors = customerRules.validate(req.body).error;
+		const errors = rule.insertOrUpdateCustomer.validate(req.body).error;
 		if (errors) {
 			console.log(errors);
 			return res.sendStatus(400);
@@ -182,7 +168,7 @@ app.put('/customers/:id', async (req, res) => {
 	try {
 		const id = parseInt(req.params.id);
 		const { name, phone, cpf, birthday } = req.body;
-		const errors = customerRules.validate(req.body).error;
+		const errors = rule.insertOrUpdateCustomer.validate(req.body).error;
 
 		if (errors) {
 			console.log(errors);
@@ -288,7 +274,7 @@ app.post('/rentals', async (req, res) => {
 //Insert Finish Rental//
 app.post('/rentals/:id/return', async (req, res) => {
 	try {
-		const { id } = req.params;
+		const id = parseInt(req.params.id);
 
 		const result = await connection.query(`
             SELECT rentals."rentDate", rentals."daysRented", games."pricePerDay"
@@ -303,7 +289,7 @@ app.post('/rentals/:id/return', async (req, res) => {
 			SELECT * FROM rentals
 			WHERE id = $1
 			AND "returnDate" IS NOT NULL`,
-			[req.params.id]
+			[id]
 		);
 
         if(isReturned.rowCount > 0) return res.sendStatus(400);
@@ -330,7 +316,7 @@ app.post('/rentals/:id/return', async (req, res) => {
 //Remove Rental//
 app.delete("/rentals/:id", async (req,res) => {
     try {
-		const { id } = req.params;
+		const id = parseInt(req.params.id);
 
 		const hasRental = await connection.query(`
             SELECT * FROM rentals WHERE rentals.id = $1;`,
