@@ -205,7 +205,6 @@ app.put('/customers/:id', async (req, res) => {
 //List Rentals//
 app.get('/rentals', async (req, res) => {
 	try {
-
 		const { customerId, gameId } = req.query;
 
 		let query = `
@@ -219,8 +218,8 @@ app.get('/rentals', async (req, res) => {
 			JOIN games ON rentals."gameId" = games.id 
 			JOIN categories ON games."categoryId" = categories.id 
 		`;
-		let result;
 
+		let result;
 		if (customerId) {
 			query += ` WHERE "customerId" = $1`;
 			result = await connection.query(query, [customerId]);
@@ -248,8 +247,7 @@ app.get('/rentals', async (req, res) => {
 			delete row.categoryName;
 			delete row.customerName;
 			delete row.gameName;
-		})
-
+		});
 		res.send(result.rows);
 	} catch (error) {
 		console.log(error);
@@ -281,6 +279,48 @@ app.post('/rentals', async (req, res) => {
 			[customerId, gameId, daysRented, (game.rows[0].pricePerDay * daysRented)]
 		);
 		res.sendStatus(201);
+	} catch (error) {
+		console.log(error);
+		res.sendStatus(500);
+	}
+});
+
+//Insert Finish Rental//
+app.post('/rentals/:id/return', async (req, res) => {
+	try {
+		const { id } = req.params;
+
+		const result = await connection.query(`
+            SELECT rentals."rentDate", rentals."daysRented", games."pricePerDay"
+            FROM rentals
+            JOIN games ON games.id = rentals."gameId"
+            WHERE rentals.id = $1;
+        `, [id]);
+
+		if (result.rowCount === 0) return res.sendStatus(404);
+
+		const rental = await connection.query(`
+			SELECT * FROM rentals
+			WHERE id = $1
+			AND "returnDate" IS NOT NULL`,
+			[req.params.id]
+		);
+
+        if(rental.rows.length > 0) return res.sendStatus(400);
+
+        const { rentDate, daysRented, pricePerDay } = result.rows[0];
+
+        const duration = dayjs().diff(rentDate, "day");
+        let delayFee = null;
+        if(duration > daysRented) delayFee = (duration - daysRented) * pricePerDay;
+
+        await connection.query(`
+            UPDATE rentals
+            SET "returnDate" = NOW(), "delayFee" = $1
+            WHERE id = $2`,
+			[delayFee, id]
+		);
+		res.sendStatus(200);
 	} catch (error) {
 		console.log(error);
 		res.sendStatus(500);
